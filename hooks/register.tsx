@@ -41,6 +41,19 @@ const COULEUR: Record<Etat, string> = {
   echoue: 'error',
 }
 
+/** La ligne épinglée, assez courte pour tenir sous le champ de saisie : « Ctx 8% · 5h 63% ↻14:00 · Sem 46% ». */
+function ligneCourte(t: Tableau): string {
+  const parts: string[] = [`Ctx ${t.contexte?.pourcent === undefined ? '—' : `${t.contexte.pourcent}%`}`]
+  for (const l of trierLimites(t.limites)) {
+    const nom = l.kind === 'five_hour' ? '5h' : l.kind === 'seven_day' ? 'Sem' : nomLimite(l.kind)
+    const fin = l.kind === 'five_hour' && l.finit ? ` ↻${formatHeure(Date.parse(l.finit), DECALAGE_MIN)}` : ''
+    parts.push(`${nom} ${Math.round(l.pourcent)}%${fin}`)
+  }
+  const actifs = t.agents.filter(a => a.etat === 'cours' || a.etat === 'attente').length
+  if (actifs > 0) parts.push(`${actifs} ag.`)
+  return parts.join(' · ')
+}
+
 /** Les chiffres que le moteur donne déjà à un crochet (`session.measure`). */
 type Mesure = Pick<SessionUsage, 'context' | 'rateLimits'>
 
@@ -65,7 +78,7 @@ async function rafraichir($: EngineInterface, fournie?: Mesure): Promise<void> {
       // Pas de surface : rien à redessiner.
     }
     // Visible même sans panneau : une ligne épinglée sous le champ de saisie…
-    $.ui.status(resumeLigne(neuf, DECALAGE_MIN, false))
+    $.ui.status(ligneCourte(neuf))
     // …et, à la fin d'un tour de la conversation, une ligne dans le chat avec le détail.
     const detail = resumeLigne(neuf, DECALAGE_MIN, true)
     if (ecrireAuTour) {
