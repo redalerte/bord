@@ -1,7 +1,7 @@
 {
   "name": "bord",
-  "version": "0.1.4",
-  "description": "Tableau de bord ouvert par /bord : sous-agents, contexte et limites d'utilisation.",
+  "version": "0.1.5",
+  "description": "Une ligne sous le champ de saisie : contexte, limites d'utilisation et sous-agents.",
   "author": { "name": "Redafunk" },
   "types": "./types/index.d.ts"
 }
