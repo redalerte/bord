@@ -1,0 +1,6 @@
+{
+  "name": "bord",
+  "description": "Bord, un tableau de bord pour Claude Code.",
+  "owner": { "name": "Redafunk" },
+  "plugins": [{ "name": "bord", "source": "./" }]
+}
