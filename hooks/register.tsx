@@ -1,4 +1,4 @@
-import { atom, read, update } from 'claude-code'
+import { atom, update } from 'claude-code'
 import type { EngineInterface, Register, SessionUsage } from 'claude-code'
 
 import type { Etat, Tableau } from '../types'
@@ -28,6 +28,8 @@ let dernier = 0
 let enAttente = false
 /** Vrai quand un tour de la conversation vient de finir : le prochain rafraîchissement l'écrit dans le chat. */
 let ecrireAuTour = false
+/** Dernier tableau calculé : le panneau le dessine sans rien attendre. */
+let memoire: Tableau = VIDE
 /** Comment s'est terminé le dernier tour de chaque sous-agent. */
 const fins: Record<string, string> = {}
 
@@ -56,6 +58,12 @@ async function rafraichir($: EngineInterface, fournie?: Mesure): Promise<void> {
       neuf = construireTableau(avant, vus, usage, maintenant, fins)
       return neuf
     })
+    memoire = neuf
+    try {
+      $.ui.invalidate('ui.render')
+    } catch {
+      // Pas de surface : rien à redessiner.
+    }
     // Visible même sans panneau : une ligne épinglée sous le champ de saisie…
     $.ui.status(resumeLigne(neuf, DECALAGE_MIN, false))
     // …et, à la fin d'un tour de la conversation, une ligne dans le chat avec le détail.
@@ -142,17 +150,9 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
-    // Le bureau peut nommer l'instance autrement : on reconnaît le panneau à son titre aussi.
+  on('ui.render', { component: 'Pane' }, ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
-    let t: Tableau
-    try {
-      t = await read($, tableau)
-    } catch (erreur) {
-      // Mieux vaut dire ce qui cloche dans le panneau que le laisser vide.
-      const message = erreur instanceof Error ? erreur.message : String(erreur)
-      return <Text>{`Bord · lecture impossible : ${message}`}</Text>
-    }
+    const t = memoire
     const colonnes = e.props.bodyColumns ?? 40
     const largeur = Math.max(10, Math.min(30, colonnes - 14))
     const agents = ordonner(t.agents)
@@ -161,7 +161,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={1}>
-        <Text dimColor>{`Bord 0.1.2 · ${e.surface} · ${String(e.requestId)} · ${e.props.title}`}</Text>
+        <Text dimColor>{`Bord 0.1.3 · ${e.surface} · ${String(e.requestId)} · ${e.props.title}`}</Text>
         <Box flexDirection="column">
           <Text weight="bold">Sous-agents</Text>
           {agents.length === 0 && <Text dimColor>Aucun sous-agent pour l'instant.</Text>}
