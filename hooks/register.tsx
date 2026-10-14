@@ -144,7 +144,6 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     // Le bureau peut nommer l'instance autrement : on reconnaît le panneau à son titre aussi.
-    if (e.requestId !== PANE && e.props.title !== 'Tableau de bord') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     let t: Tableau
     try {
@@ -162,6 +161,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={1}>
+        <Text dimColor>{`Bord 0.1.2 · ${e.surface} · ${String(e.requestId)} · ${e.props.title}`}</Text>
         <Box flexDirection="column">
           <Text weight="bold">Sous-agents</Text>
           {agents.length === 0 && <Text dimColor>Aucun sous-agent pour l'instant.</Text>}
