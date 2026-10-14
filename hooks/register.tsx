@@ -1,26 +1,18 @@
 import { atom, update } from 'claude-code'
 import type { EngineInterface, Register, SessionUsage } from 'claude-code'
 
-import type { Etat, Tableau } from '../types'
+import type { Tableau } from '../types'
 import {
   DECALAGE_MIN,
   VIDE,
   construireTableau,
   delaiAvant,
-  fmtNombre,
-  formatDuree,
   formatHeure,
-  formatReset,
-  jauge,
-  libelle,
   nomLimite,
-  nuance,
-  ordonner,
   resumeLigne,
   trierLimites,
 } from './logic'
 
-const PANE = 'bord'
 const tableau = atom({ plugin: 'bord', key: 'tableau' } as const, VIDE)
 
 /** Dernier rafraîchissement lancé, et s'il y en a un déjà programmé. */
@@ -28,18 +20,8 @@ let dernier = 0
 let enAttente = false
 /** Vrai quand un tour de la conversation vient de finir : le prochain rafraîchissement l'écrit dans le chat. */
 let ecrireAuTour = false
-/** Dernier tableau calculé : le panneau le dessine sans rien attendre. */
-let memoire: Tableau = VIDE
 /** Comment s'est terminé le dernier tour de chaque sous-agent. */
 const fins: Record<string, string> = {}
-
-const PASTILLE: Record<Etat, string> = { cours: '●', attente: '○', termine: '✓', echoue: '✕' }
-const COULEUR: Record<Etat, string> = {
-  cours: 'suggestion',
-  attente: 'inactive',
-  termine: 'success',
-  echoue: 'error',
-}
 
 /** La ligne épinglée, assez courte pour tenir sous le champ de saisie : « Ctx 8% · 5h 63% ↻14:00 · Sem 46% ». */
 function ligneCourte(t: Tableau): string {
@@ -71,13 +53,7 @@ async function rafraichir($: EngineInterface, fournie?: Mesure): Promise<void> {
       neuf = construireTableau(avant, vus, usage, maintenant, fins)
       return neuf
     })
-    memoire = neuf
-    try {
-      $.ui.invalidate('ui.render')
-    } catch {
-      // Pas de surface : rien à redessiner.
-    }
-    // Visible même sans panneau : une ligne épinglée sous le champ de saisie…
+    // Une ligne épinglée sous le champ de saisie…
     $.ui.status(ligneCourte(neuf))
     // …et, à la fin d'un tour de la conversation, une ligne dans le chat avec le détail.
     const detail = resumeLigne(neuf, DECALAGE_MIN, true)
@@ -122,26 +98,9 @@ async function demander($: EngineInterface, fournie?: Mesure): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'bord',
-      description: 'Rouvrir le tableau de bord : sous-agents, contexte, limites',
-    })
-    // Ouvert tout seul au démarrage ; /bord sert à le rouvrir après l'avoir fermé.
-    void $.ui.open({ id: PANE, title: 'Tableau de bord' })
     void demander($)
 
     return next(e)
-  })
-
-  on('command.run', { command: 'bord' }, async $ => {
-    const ouvert = await $.ui.open({ id: PANE, title: 'Tableau de bord' })
-    await demander($)
-
-    return {
-      text: ouvert.isPlaced
-        ? 'Tableau de bord ouvert.'
-        : `Le tableau de bord n'a pas de place pour l'instant : ${ouvert.reason}`,
-    }
   })
 
   // Après chaque tour, celui de la conversation comme celui d'un sous-agent.
@@ -161,82 +120,5 @@ export const register: Register = on => {
     }
 
     return next(e)
-  })
-
-  on('ui.render', { component: 'Pane' }, ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
-    const t = memoire
-    const colonnes = e.props.bodyColumns ?? 40
-    const largeur = Math.max(10, Math.min(30, colonnes - 14))
-    const agents = ordonner(t.agents)
-    const limites = trierLimites(t.limites)
-    const pc = t.contexte?.pourcent
-
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text dimColor>{`Bord 0.1.3 · ${e.surface} · ${String(e.requestId)} · ${e.props.title}`}</Text>
-        <Box flexDirection="column">
-          <Text weight="bold">Sous-agents</Text>
-          {agents.length === 0 && <Text dimColor>Aucun sous-agent pour l'instant.</Text>}
-          {agents.map(a => (
-            <Box gap={1}>
-              <Text color={COULEUR[a.etat]}>
-                {PASTILLE[a.etat]} {libelle(a.etat).padEnd(10)}
-              </Text>
-              <Box flexShrink={1}>
-                <Text wrap="truncate-end">{a.nom}</Text>
-              </Box>
-              <Text dimColor tabular>
-                depuis {formatDuree(t.instant - a.depuis)}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-
-        <Box flexDirection="column">
-          <Text weight="bold">Contexte</Text>
-          {pc === undefined ? (
-            <Text dimColor>Pas encore de mesure : elle arrive avec la première réponse.</Text>
-          ) : (
-            <Box flexDirection="column">
-              <Box gap={1}>
-                <Text color={nuance(pc)}>{jauge(pc, largeur)}</Text>
-                <Text tabular>{pc} % utilisé</Text>
-              </Box>
-              {t.contexte?.tokens !== undefined && (
-                <Text dimColor tabular>
-                  {fmtNombre(t.contexte.tokens)} / {fmtNombre(t.contexte.fenetre)} tokens
-                </Text>
-              )}
-            </Box>
-          )}
-        </Box>
-
-        <Box flexDirection="column" gap={1}>
-          <Text weight="bold">Limites d'utilisation</Text>
-          {limites.length === 0 && (
-            <Text dimColor>Aucune limite signalée pour l'instant (elle arrive avec la première réponse).</Text>
-          )}
-          {limites.map(l => (
-            <Box flexDirection="column">
-              <Box gap={1}>
-                <Text>{nomLimite(l.kind)}</Text>
-                <Text color={nuance(l.pourcent)}>{jauge(l.pourcent, largeur)}</Text>
-                <Text tabular>{l.pourcent} %</Text>
-              </Box>
-              <Text dimColor>
-                remise à zéro : {formatReset(l.finit, t.instant, DECALAGE_MIN)}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-
-        <Text dimColor>
-          {t.instant === 0
-            ? 'Aucune mesure pour l\'instant.'
-            : `Mis à jour à ${formatHeure(t.instant, DECALAGE_MIN, true)} (heure d'Alger)`}
-        </Text>
-      </Box>
-    )
   })
 }
